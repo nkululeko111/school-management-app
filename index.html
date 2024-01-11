@@ -1,0 +1,64 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>South African Schools Admin</title>
+    <link rel="stylesheet" href="styles.css"> <!-- Include your CSS file -->
+  
+    
+</head>
+
+<body>
+    <header>
+        <h1>South African Schools Admin</h1>
+    </header>
+
+    <section>
+        <h2>Choose Your Role</h2>
+
+        <div>
+            <!-- Update the onclick attribute to call the JavaScript function with the respective role -->
+            <a href="#" class="button" onclick="redirectToLogin('teacher')">Teacher</a>
+            <a href="#" class="button" onclick="redirectToLogin('admin')">Admin</a>
+            <a href="#" class="button" onclick="redirectToLogin('parent')">Parent</a>
+            <a href="#" class="button" onclick="redirectToLogin('district')">District</a>
+        </div>
+    </section>
+
+    <footer>
+        <p>&copy; 2023 South African Schools Admin. All rights reserved.</p>
+    </footer>
+
+
+    <script>
+        // JavaScript function to redirect to the login page
+        function redirectToLogin(role) {
+            var loginPage;
+            // Define login pages for each role
+            switch (role) {
+                case 'teacher':
+                    loginPage = 'registration.html';
+                    break;
+                case 'admin':
+                    loginPage = 'registration.html';
+                    break;
+                case 'parent':
+                    loginPage = 'registration.html';
+                    break;
+                case 'district':
+                    loginPage = 'registration.html';
+                    break;
+                default:
+                    loginPage = 'registration.html'; // Default to registration page
+            }
+            // Redirect to the appropriate login page
+            window.location.href = loginPage;
+        }
+    </script>
+</body>
+
+
+</html>
