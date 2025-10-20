@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { 
-  School, 
-  Users, 
-  Calendar, 
-  MessageSquare, 
-  BarChart3, 
-  Settings, 
+import { useNavigate, useLocation } from 'react-router-dom';
+import {
+  School,
+  Users,
+  Calendar,
+  MessageSquare,
+  BarChart3,
+  Settings,
   LogOut,
   Menu,
   X,
@@ -17,6 +18,8 @@ import {
 
 const Navigation: React.FC = () => {
   const { user, logout, isOnline } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const navigationItems = [
@@ -89,20 +92,23 @@ const Navigation: React.FC = () => {
           <ul className="space-y-2">
             {filteredNavItems.map((item) => {
               const Icon = item.icon;
+              const isActive = location.pathname === item.path;
               return (
                 <li key={item.path}>
-                  <a
-                    href={item.path}
-                    className="flex items-center gap-3 px-4 py-3 text-gray-700 rounded-lg hover:bg-orange-50 hover:text-orange-700 transition-colors duration-200 group"
-                    onClick={(e) => {
-                      e.preventDefault();
+                  <button
+                    onClick={() => {
+                      navigate(item.path);
                       setIsMobileMenuOpen(false);
-                      // Handle navigation here
                     }}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors duration-200 group w-full text-left ${
+                      isActive
+                        ? 'bg-orange-100 text-orange-700'
+                        : 'text-gray-700 hover:bg-orange-50 hover:text-orange-700'
+                    }`}
                   >
                     <Icon className="w-5 h-5 group-hover:scale-110 transition-transform" />
                     <span className="font-medium">{item.label}</span>
-                  </a>
+                  </button>
                 </li>
               );
             })}
