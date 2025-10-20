@@ -118,7 +118,7 @@ export const SchoolProvider: React.FC<SchoolProviderProps> = ({ children }) => {
     const today = new Date().toISOString().split('T')[0];
     updateStudent(studentId, { 
       lastAttendance: today,
-      attendance: present ? 100 : 0 // Simplified for demo
+      attendance: present ? 100 : 0 
     });
   };
 

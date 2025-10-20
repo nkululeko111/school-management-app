@@ -48,7 +48,7 @@ const Navigation: React.FC = () => {
             >
               {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
-            <h1 className="text-xl font-bold text-gray-800">Ubuntu School System</h1>
+            <h1 className="text-xl font-bold text-gray-800">SA School System</h1>
           </div>
           
           <div className="flex items-center gap-4">
@@ -83,7 +83,7 @@ const Navigation: React.FC = () => {
         <div className="flex items-center gap-3 p-6 african-gradient">
           <School className="w-8 h-8 text-white" />
           <div>
-            <h2 className="text-lg font-bold text-white">Ubuntu School</h2>
+            <h2 className="text-lg font-bold text-white">SA School</h2>
             <p className="text-sm text-orange-100">Management System</p>
           </div>
         </div>

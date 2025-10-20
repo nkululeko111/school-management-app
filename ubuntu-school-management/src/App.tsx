@@ -1,3 +1,4 @@
+// src/App.tsx
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -11,19 +12,49 @@ import TimetableManagement from './pages/TimetableManagement';
 import Communication from './pages/Communication';
 import Reports from './pages/Reports';
 import LoadingScreen from './components/LoadingScreen';
+import OnboardPage from './components/onboard/SchoolOnboardingPage';
+import { supabase } from './supabaseClient';
 import './App.css';
 
 function AppRoutes() {
   const { user, loading } = useAuth();
+  const [schoolExists, setSchoolExists] = useState<boolean | null>(null);
 
-  if (loading) {
+  useEffect(() => {
+    async function checkSchool() {
+      try {
+        const { data, error } = await supabase.from('schools').select('id').limit(1).single();
+
+        if (error && error.code !== 'PGRST116') {
+          // Ignore "No rows returned" error code
+          console.error(error);
+        }
+
+        setSchoolExists(!!data);
+      } catch (err) {
+        console.error(err);
+        setSchoolExists(false);
+      }
+    }
+
+    checkSchool();
+  }, []);
+
+  if (loading || schoolExists === null) {
     return <LoadingScreen />;
   }
 
+  // // If no school exists, show onboarding page
+  if (!schoolExists) {
+    return <OnboardPage />;
+  }
+
+  // If user is not logged in, show login page
   if (!user) {
     return <LoginPage />;
   }
 
+  // If logged in and school exists, show main app
   return (
     <div className="min-h-screen bg-gray-50">
       <Routes>

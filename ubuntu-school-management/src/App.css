@@ -1,10 +1,10 @@
 /* African-inspired color palette and custom styles */
 :root {
-  --primary-color: #D97706; /* Warm orange */
-  --secondary-color: #065F46; /* Deep green */
-  --accent-color: #DC2626; /* Vibrant red */
-  --earth-tone: #92400E; /* Rich brown */
-  --gold-accent: #F59E0B; /* Golden yellow */
+  --primary-color: #874bba; 
+  --secondary-color: #065F46; 
+  --accent-color: #DC2626;
+  --earth-tone: #92400E; 
+  --gold-accent: #F59E0B; 
   --success-color: #10B981;
   --warning-color: #F59E0B;
   --error-color: #EF4444;
