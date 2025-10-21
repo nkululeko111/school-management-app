@@ -4,6 +4,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SchoolProvider } from './contexts/SchoolContext';
 import LoginPage from './pages/LoginPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 import Dashboard from './components/Dashboard';
 import StudentManagement from './pages/StudentManagement';
 import AttendanceManagement from './pages/AttendanceManagement';
@@ -11,7 +12,10 @@ import ClassManagement from './pages/ClassManagement';
 import TimetableManagement from './pages/TimetableManagement';
 import Communication from './pages/Communication';
 import Reports from './pages/Reports';
+import UserManagement from './pages/UserManagement';
+import ReportCards from './pages/ReportCards';
 import LoadingScreen from './components/LoadingScreen';
+import WelcomeScreen from './components/WelcomeScreen';
 import OnboardPage from './components/onboard/SchoolOnboardingPage';
 import { supabase } from './supabaseClient';
 import './App.css';
@@ -19,6 +23,7 @@ import './App.css';
 function AppRoutes() {
   const { user, loading } = useAuth();
   const [schoolExists, setSchoolExists] = useState<boolean | null>(null);
+  const [showWelcome, setShowWelcome] = useState(true);
 
   useEffect(() => {
     async function checkSchool() {
@@ -44,14 +49,23 @@ function AppRoutes() {
     return <LoadingScreen />;
   }
 
-  // // If no school exists, show onboarding page
+  // Show welcome screen first, then onboarding
   if (!schoolExists) {
-    return <OnboardPage />;
+    if (showWelcome) {
+      return <WelcomeScreen onGetStarted={() => setShowWelcome(false)} />;
+    }
+    return <OnboardPage onBack={() => setShowWelcome(true)} />;
   }
 
-  // If user is not logged in, show login page
+  // If user is not logged in, show login page or reset password page
   if (!user) {
-    return <LoginPage />;
+    return (
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    );
   }
 
   // If logged in and school exists, show main app
@@ -65,6 +79,8 @@ function AppRoutes() {
         <Route path="/timetable" element={<TimetableManagement />} />
         <Route path="/communication" element={<Communication />} />
         <Route path="/reports" element={<Reports />} />
+        <Route path="/admin/users" element={<UserManagement />} />
+        <Route path="/report-cards" element={<ReportCards />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </div>

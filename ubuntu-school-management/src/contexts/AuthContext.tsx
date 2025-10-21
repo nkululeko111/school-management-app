@@ -1,29 +1,33 @@
+// src/contexts/AuthContext.tsx
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { supabase } from '../supabaseClient';
 
 interface User {
   id: string;
-  name: string;
+  name?: string;
   email: string;
-  role: 'admin' | 'teacher' | 'student' | 'parent';
-  schoolId: string;
+  role?: 'admin' | 'teacher' | 'student' | 'parent';
+  schoolId?: string;
   avatar?: string;
+  profileId?: string;
 }
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   isOnline: boolean;
+  resetPassword: (email: string) => Promise<void>;
+  updatePassword: (newPassword: string) => Promise<void>;
+  refreshUserProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (!context) throw new Error('useAuth must be used within AuthProvider');
   return context;
 };
 
@@ -37,59 +41,132 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   useEffect(() => {
-    // Check for stored user session
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-    setLoading(false);
+    // Load session on mount
+    const loadSession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          await loadUserProfile(session.user.id);
+        }
+      } catch (err) {
+        console.error('Error loading session:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    // Monitor connectivity
+    loadSession();
+
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        await loadUserProfile(session.user.id);
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        localStorage.removeItem('user');
+      }
+    });
+
+    // Online/offline listeners
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
-
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
     return () => {
+      subscription.unsubscribe();
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
 
+  // Load user profile; does NOT sign out if profile missing
+  const loadUserProfile = async (userId: string) => {
+    try {
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select(`
+          id,
+          full_name,
+          email,
+          role,
+          avatar_url,
+          school_id,
+          schools(name)
+        `)
+        .eq('id', userId)
+        .maybeSingle(); // <-- allow 0 or 1 row
+
+      if (error) throw error;
+
+      const userData: User = {
+        id: userId,
+        email: profile?.email || '',
+        name: profile?.full_name,
+        role: profile?.role,
+        schoolId: profile?.school_id,
+        avatar: profile?.avatar_url,
+        profileId: profile?.id
+      };
+
+      setUser(userData);
+      localStorage.setItem('user', JSON.stringify(userData));
+    } catch (err) {
+      console.warn('Could not load full user profile yet. User is logged in with minimal info.', err);
+      // Minimal info from auth session
+      setUser({ id: userId, email: user?.email || '' });
+    }
+  };
+
+  const refreshUserProfile = async () => {
+    if (user?.id) await loadUserProfile(user.id);
+  };
+
   const login = async (email: string, password: string) => {
     setLoading(true);
     try {
-      // Demo login - in production this would call your API
-      const demoUser: User = {
-        id: '1',
-        name: email === 'admin@school.com' ? 'Administrator' : 
-              email === 'teacher@school.com' ? 'Sarah Johnson' :
-              email === 'parent@school.com' ? 'John Mwangi' : 'Student Name',
-        email,
-        role: email === 'admin@school.com' ? 'admin' : 
-              email === 'teacher@school.com' ? 'teacher' :
-              email === 'parent@school.com' ? 'parent' : 'student',
-        schoolId: 'demo-school',
-        avatar: `https://images.pexels.com/photos/1181467/pexels-photo-1181467.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&fit=crop`
-      };
-      
-      setUser(demoUser);
-      localStorage.setItem('user', JSON.stringify(demoUser));
-    } catch (error) {
-      throw new Error('Login failed');
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      if (data.user) await loadUserProfile(data.user.id);
+    } catch (err: any) {
+      throw new Error(err.message || 'Login failed');
     } finally {
       setLoading(false);
     }
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('user');
+  const logout = async () => {
+    try {
+      await supabase.auth.signOut();
+      setUser(null);
+      localStorage.removeItem('user');
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
+  };
+
+  const resetPassword = async (email: string) => {
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) throw error;
+    } catch (err: any) {
+      throw new Error(err.message || 'Password reset failed');
+    }
+  };
+
+  const updatePassword = async (newPassword: string) => {
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+    } catch (err: any) {
+      throw new Error(err.message || 'Password update failed');
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, isOnline }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, isOnline, resetPassword, updatePassword, refreshUserProfile }}>
       {children}
     </AuthContext.Provider>
   );

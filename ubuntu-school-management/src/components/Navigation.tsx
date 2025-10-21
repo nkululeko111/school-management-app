@@ -7,7 +7,7 @@ import {
   Calendar,
   MessageSquare,
   BarChart3,
-  Settings,
+  // Settings,
   LogOut,
   Menu,
   X,
@@ -33,7 +33,7 @@ const Navigation: React.FC = () => {
   ];
 
   const filteredNavItems = navigationItems.filter(item => 
-    item.roles.includes(user?.role || 'student')
+    item.roles.includes(user?.role || 'admin')
   );
 
   return (
