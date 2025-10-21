@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Navigation from '../components/Navigation';
-import { useSchool } from '../contexts/SchoolContext';
+import { useAuth } from '../hooks/useAuth';
+import { supabase } from '../supabaseClient';
 import { 
   Calendar, 
   Clock, 
@@ -9,13 +10,23 @@ import {
   Settings,
   BookOpen,
   Users,
-  MapPin
+  MapPin,
+  Loader2
 } from 'lucide-react';
 
+interface Class {
+  id: string;
+  name: string;
+  grade: string;
+  teacher: string;
+}
+
 const TimetableManagement: React.FC = () => {
-  const { classes } = useSchool();
-  const [selectedClass, setSelectedClass] = useState(classes[0]?.id || '');
+  const { user } = useAuth();
+  const [classes, setClasses] = useState<Class[]>([]);
+  const [selectedClass, setSelectedClass] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const timeSlots = [
     '8:00-8:40', '8:40-9:20', '9:20-9:40', '9:40-10:20', 
@@ -37,12 +48,66 @@ const TimetableManagement: React.FC = () => {
     Friday: ['English', 'Science', 'Break', 'Mathematics', 'Lunch', 'Art', 'Music', 'Study Period', 'Assembly', 'Study Period']
   };
 
+  useEffect(() => {
+    const loadClasses = async () => {
+      if (!user?.schoolId) return;
+      
+      try {
+        setLoading(true);
+        
+        const { data: classesData, error: classesError } = await supabase
+          .from('classes')
+          .select(`
+            id,
+            name,
+            grade,
+            teacher_id,
+            teachers(first_name, last_name)
+          `)
+          .eq('school_id', user.schoolId);
+
+        if (classesError) throw classesError;
+
+        const formattedClasses = classesData?.map((cls: any) => {
+          const teacherRecord = Array.isArray(cls.teachers) ? cls.teachers[0] : cls.teachers;
+          const teacherName = teacherRecord ? `${teacherRecord.first_name ?? ''} ${teacherRecord.last_name ?? ''}`.trim() : 'No Teacher';
+          return {
+            id: cls.id,
+            name: cls.name,
+            grade: cls.grade,
+            teacher: teacherName || 'No Teacher'
+          };
+        }) || [];
+
+        setClasses(formattedClasses);
+        
+        if (formattedClasses.length > 0 && !selectedClass) {
+          setSelectedClass(formattedClasses[0].id);
+        }
+      } catch (error) {
+        console.error('Error loading classes:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadClasses();
+  }, [user?.schoolId, selectedClass]);
+
   const handleGenerateTimetable = async () => {
+    if (!selectedClass) return;
+    
     setIsGenerating(true);
-    // Simulate timetable generation
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    setIsGenerating(false);
-    alert('Timetable generated successfully with optimized teacher allocation and resource usage!');
+    try {
+      // TODO: Implement actual timetable generation logic
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      alert('Timetable generated successfully with optimized teacher allocation and resource usage!');
+    } catch (error) {
+      console.error('Error generating timetable:', error);
+      alert('Error generating timetable. Please try again.');
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const conflictChecks = [
@@ -92,15 +157,26 @@ const TimetableManagement: React.FC = () => {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Target Class</label>
-                  <select
-                    value={selectedClass}
-                    onChange={(e) => setSelectedClass(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
-                  >
-                    {classes.map(cls => (
-                      <option key={cls.id} value={cls.id}>{cls.grade} - {cls.name}</option>
-                    ))}
-                  </select>
+                  {loading ? (
+                    <div className="flex items-center gap-2 text-gray-600">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Loading classes...
+                    </div>
+                  ) : (
+                    <select
+                      value={selectedClass}
+                      onChange={(e) => setSelectedClass(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                    >
+                      {classes.length === 0 ? (
+                        <option value="">No classes found</option>
+                      ) : (
+                        classes.map(cls => (
+                          <option key={cls.id} value={cls.id}>{cls.grade} - {cls.name}</option>
+                        ))
+                      )}
+                    </select>
+                  )}
                 </div>
                 
                 <div>

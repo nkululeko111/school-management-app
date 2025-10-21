@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { useSchool } from '../contexts/SchoolContext';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../hooks/useAuth';
+import { supabase } from '../supabaseClient';
 import Navigation from '../components/Navigation';
 import { 
   Plus, 
@@ -11,14 +12,96 @@ import {
   MapPin,
   Calendar,
   Edit,
-  Trash2
+  Trash2,
+  Loader2,
+  User
 } from 'lucide-react';
 
+interface Student {
+  id: string;
+  name: string;
+  admissionNumber: string;
+  class: string;
+  grade: string;
+  parentContact: string;
+  attendance: number;
+  avatar?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  status: 'active' | 'inactive';
+}
+
 const StudentManagement: React.FC = () => {
-  const { students, addStudent } = useSchool();
+  const { user } = useAuth();
+  const [students, setStudents] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedGrade, setSelectedGrade] = useState('all');
+  const [classes, setClasses] = useState<{ id: string; name: string; grade: string }[]>([]);
+
+  useEffect(() => {
+    const loadStudents = async () => {
+      if (!user?.schoolId) return;
+      
+      try {
+        setLoading(true);
+        
+        // Load students with their class and attendance data
+        const { data: studentsData, error: studentsError } = await supabase
+          .from('students')
+          .select(`
+            id,
+            first_name,
+            last_name,
+            admission_number,
+            email,
+            phone,
+            address,
+            status,
+            class_id,
+            classes(name, grade),
+            attendance_summary(attendance_percentage)
+          `)
+          .eq('school_id', user.schoolId);
+
+        if (studentsError) throw studentsError;
+
+        // Load classes for dropdown
+        const { data: classesData, error: classesError } = await supabase
+          .from('classes')
+          .select('id, name, grade')
+          .eq('school_id', user.schoolId)
+          .order('grade');
+
+        if (classesError) throw classesError;
+
+        const formattedStudents = studentsData?.map(student => ({
+          id: student.id,
+          name: `${student.first_name} ${student.last_name}`,
+          admissionNumber: student.admission_number,
+          class: student.classes?.[0]?.name || 'N/A',
+          grade: student.classes?.[0]?.grade || 'N/A',
+          parentContact: student.phone || 'N/A',
+          attendance: student.attendance_summary?.[0]?.attendance_percentage || 0,
+          email: student.email,
+          phone: student.phone,
+          address: student.address,
+          status: student.status as 'active' | 'inactive'
+        })) || [];
+
+        setStudents(formattedStudents);
+        setClasses(classesData || []);
+      } catch (error) {
+        console.error('Error loading students:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadStudents();
+  }, [user?.schoolId]);
 
   const filteredStudents = students.filter(student => {
     const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -27,7 +110,7 @@ const StudentManagement: React.FC = () => {
     return matchesSearch && matchesGrade;
   });
 
-  const grades = ['all', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7', 'Grade 8'];
+  const grades = ['all', ...Array.from(new Set(students.map(s => s.grade))).sort()];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -101,71 +184,86 @@ const StudentManagement: React.FC = () => {
               </h2>
             </div>
             
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Grade & Class</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Admission No.</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Parent Contact</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Attendance</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredStudents.map((student) => (
-                    <tr key={student.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <img
-                            src={student.avatar}
-                            alt={student.name}
-                            className="w-10 h-10 rounded-full object-cover mr-3"
-                          />
-                          <div>
-                            <div className="text-sm font-medium text-gray-900">{student.name}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
-                          {student.grade} - {student.class}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {student.admissionNumber}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <Phone size={14} className="text-gray-400" />
-                          <span className="text-sm text-gray-900">{student.parentContact}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className={`w-3 h-3 rounded-full mr-2 ${
-                            student.attendance >= 90 ? 'bg-green-400' :
-                            student.attendance >= 75 ? 'bg-yellow-400' : 'bg-red-400'
-                          }`} />
-                          <span className="text-sm text-gray-900">{student.attendance}%</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex gap-2">
-                          <button className="text-blue-600 hover:text-blue-900 p-1 rounded">
-                            <Edit size={16} />
-                          </button>
-                          <button className="text-red-600 hover:text-red-900 p-1 rounded">
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </td>
+            {loading ? (
+              <div className="p-8 text-center">
+                <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-orange-600" />
+                <p className="text-gray-600">Loading students...</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Grade & Class</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Admission No.</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Parent Contact</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Attendance</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredStudents.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                          <User className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                          <p>No students found</p>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredStudents.map((student) => (
+                        <tr key={student.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center mr-3">
+                                <User className="w-5 h-5 text-orange-600" />
+                              </div>
+                              <div>
+                                <div className="text-sm font-medium text-gray-900">{student.name}</div>
+                                <div className="text-sm text-gray-500">{student.email}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
+                              {student.grade} - {student.class}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {student.admissionNumber}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              <Phone size={14} className="text-gray-400" />
+                              <span className="text-sm text-gray-900">{student.parentContact}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className={`w-3 h-3 rounded-full mr-2 ${
+                                student.attendance >= 90 ? 'bg-green-400' :
+                                student.attendance >= 75 ? 'bg-yellow-400' : 'bg-red-400'
+                              }`} />
+                              <span className="text-sm text-gray-900">{student.attendance}%</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <div className="flex gap-2">
+                              <button className="text-blue-600 hover:text-blue-900 p-1 rounded">
+                                <Edit size={16} />
+                              </button>
+                              <button className="text-red-600 hover:text-red-900 p-1 rounded">
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       </main>

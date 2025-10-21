@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { useSchool } from '../contexts/SchoolContext';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../hooks/useAuth';
+import { supabase } from '../supabaseClient';
 import Navigation from '../components/Navigation';
 import { 
   School, 
@@ -10,15 +11,119 @@ import {
   Trash2,
   UserPlus,
   Calendar,
-  Clock
+  Clock,
+  Loader2
 } from 'lucide-react';
 
+interface Class {
+  id: string;
+  name: string;
+  grade: string;
+  teacher: string;
+  subjects: string[];
+  studentCount: number;
+}
+
+interface Student {
+  id: string;
+  name: string;
+  admissionNumber: string;
+  attendance: number;
+  avatar?: string;
+}
+
 const ClassManagement: React.FC = () => {
-  const { classes, students, getClassStudents } = useSchool();
-  const [selectedClass, setSelectedClass] = useState(classes[0]?.id || '');
+  const { user } = useAuth();
+  const [classes, setClasses] = useState<Class[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [selectedClass, setSelectedClass] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadClasses = async () => {
+      if (!user?.schoolId) return;
+      
+      try {
+        setLoading(true);
+        
+        // Load classes with teacher and student count
+        const { data: classesData, error: classesError } = await supabase
+          .from('classes')
+          .select(`
+            id,
+            name,
+            grade,
+            teacher_id,
+            teachers(first_name, last_name),
+            students(count)
+          `)
+          .eq('school_id', user.schoolId);
+
+        if (classesError) throw classesError;
+
+        const formattedClasses = classesData?.map(cls => ({
+          id: cls.id,
+          name: cls.name,
+          grade: cls.grade,
+          teacher: Array.isArray(cls.teachers) && cls.teachers.length > 0
+            ? `${cls.teachers[0].first_name} ${cls.teachers[0].last_name}`
+            : 'No Teacher',
+          subjects: ['Mathematics', 'English', 'Science', 'Social Studies'], // Default subjects
+          studentCount: cls.students?.[0]?.count || 0
+        })) || [];
+
+        setClasses(formattedClasses);
+        
+        if (formattedClasses.length > 0 && !selectedClass) {
+          setSelectedClass(formattedClasses[0].id);
+        }
+      } catch (error) {
+        console.error('Error loading classes:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadClasses();
+  }, [user?.schoolId, selectedClass]);
+
+  useEffect(() => {
+    const loadStudents = async () => {
+      if (!selectedClass || !user?.schoolId) return;
+      
+      try {
+        const { data: studentsData, error: studentsError } = await supabase
+          .from('students')
+          .select(`
+            id,
+            first_name,
+            last_name,
+            admission_number,
+            attendance_summary(attendance_percentage)
+          `)
+          .eq('school_id', user.schoolId)
+          .eq('class_id', selectedClass);
+
+        if (studentsError) throw studentsError;
+
+        const formattedStudents = studentsData?.map(student => ({
+          id: student.id,
+          name: `${student.first_name} ${student.last_name}`,
+          admissionNumber: student.admission_number,
+          attendance: student.attendance_summary?.[0]?.attendance_percentage || 0
+        })) || [];
+
+        setStudents(formattedStudents);
+      } catch (error) {
+        console.error('Error loading students:', error);
+      }
+    };
+
+    loadStudents();
+  }, [selectedClass, user?.schoolId]);
 
   const selectedClassData = classes.find(c => c.id === selectedClass);
-  const classStudents = selectedClassData ? getClassStudents(selectedClass) : [];
+  const classStudents = students;
 
   const scheduleData = [
     { day: 'Monday', periods: ['Mathematics', 'English', 'Break', 'Science', 'Lunch', 'Social Studies', 'Kiswahili'] },
@@ -53,17 +158,28 @@ const ClassManagement: React.FC = () => {
           {/* Class Selection */}
           <div className="bg-white rounded-xl shadow-lg p-6">
             <label className="block text-sm font-medium text-gray-700 mb-2">Select Class</label>
-            <select
-              value={selectedClass}
-              onChange={(e) => setSelectedClass(e.target.value)}
-              className="w-full md:w-auto px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-            >
-              {classes.map(cls => (
-                <option key={cls.id} value={cls.id}>
-                  {cls.grade} - {cls.name} (Teacher: {cls.teacher})
-                </option>
-              ))}
-            </select>
+            {loading ? (
+              <div className="flex items-center gap-2 text-gray-600">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Loading classes...
+              </div>
+            ) : (
+              <select
+                value={selectedClass}
+                onChange={(e) => setSelectedClass(e.target.value)}
+                className="w-full md:w-auto px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+              >
+                {classes.length === 0 ? (
+                  <option value="">No classes found</option>
+                ) : (
+                  classes.map(cls => (
+                    <option key={cls.id} value={cls.id}>
+                      {cls.grade} - {cls.name} (Teacher: {cls.teacher})
+                    </option>
+                  ))
+                )}
+              </select>
+            )}
           </div>
 
           {selectedClassData && (

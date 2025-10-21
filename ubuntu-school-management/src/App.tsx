@@ -1,7 +1,8 @@
 // src/App.tsx
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { AuthProvider } from './contexts/AuthContext';
+import { useAuth } from './hooks/useAuth';
 import { SchoolProvider } from './contexts/SchoolContext';
 import LoginPage from './pages/LoginPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';

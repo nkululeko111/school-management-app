@@ -1,5 +1,5 @@
 // src/contexts/AuthContext.tsx
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '../supabaseClient';
 
 interface User {
@@ -23,13 +23,7 @@ interface AuthContextType {
   refreshUserProfile: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within AuthProvider');
-  return context;
-};
+export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 interface AuthProviderProps {
   children: ReactNode;
@@ -41,23 +35,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   useEffect(() => {
-    // Load session on mount
     const loadSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          await loadUserProfile(session.user.id);
-        }
+        if (session?.user) await loadUserProfile(session.user.id);
       } catch (err) {
         console.error('Error loading session:', err);
       } finally {
         setLoading(false);
       }
     };
-
     loadSession();
 
-    // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
         await loadUserProfile(session.user.id);
@@ -67,7 +56,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
     });
 
-    // Online/offline listeners
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
     window.addEventListener('online', handleOnline);
@@ -80,7 +68,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     };
   }, []);
 
-  // Load user profile; does NOT sign out if profile missing
   const loadUserProfile = async (userId: string) => {
     try {
       const { data: profile, error } = await supabase
@@ -95,7 +82,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           schools(name)
         `)
         .eq('id', userId)
-        .maybeSingle(); // <-- allow 0 or 1 row
+        .maybeSingle();
 
       if (error) throw error;
 
@@ -112,8 +99,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setUser(userData);
       localStorage.setItem('user', JSON.stringify(userData));
     } catch (err) {
-      console.warn('Could not load full user profile yet. User is logged in with minimal info.', err);
-      // Minimal info from auth session
+      console.warn('Could not load full user profile yet:', err);
       setUser({ id: userId, email: user?.email || '' });
     }
   };
@@ -166,7 +152,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, isOnline, resetPassword, updatePassword, refreshUserProfile }}>
+    <AuthContext.Provider
+      value={{ user, loading, login, logout, isOnline, resetPassword, updatePassword, refreshUserProfile }}
+    >
       {children}
     </AuthContext.Provider>
   );

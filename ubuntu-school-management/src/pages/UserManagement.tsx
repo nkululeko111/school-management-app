@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Navigation from '../components/Navigation';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../supabaseClient';
 import { Users, UserPlus, GraduationCap, Shield, School, Loader2 } from 'lucide-react';
 

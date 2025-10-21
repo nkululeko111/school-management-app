@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Navigation from '../components/Navigation';
+import { useAuth } from '../hooks/useAuth';
+import { supabase } from '../supabaseClient';
 import { 
   BarChart3, 
   TrendingUp, 
@@ -9,12 +11,17 @@ import {
   GraduationCap,
   Award,
   AlertTriangle,
-  CheckCircle
+  CheckCircle,
+  Loader2
 } from 'lucide-react';
 
 const Reports: React.FC = () => {
+  const { user } = useAuth();
   const [selectedReport, setSelectedReport] = useState('attendance');
   const [dateRange, setDateRange] = useState('month');
+  const [loading, setLoading] = useState(false);
+  const [attendanceData, setAttendanceData] = useState<any[]>([]);
+  const [academicData, setAcademicData] = useState<any[]>([]);
 
   const reportTypes = [
     { id: 'attendance', label: 'Attendance Report', icon: Users },
@@ -23,22 +30,93 @@ const Reports: React.FC = () => {
     { id: 'communication', label: 'Communication Analytics', icon: TrendingUp }
   ];
 
-  const attendanceData = [
-    { grade: 'Grade 1', present: 145, absent: 12, total: 157, percentage: 92.4 },
-    { grade: 'Grade 2', present: 138, absent: 8, total: 146, percentage: 94.5 },
-    { grade: 'Grade 3', present: 142, absent: 15, total: 157, percentage: 90.4 },
-    { grade: 'Grade 4', present: 134, absent: 11, total: 145, percentage: 92.4 },
-    { grade: 'Grade 5', present: 128, absent: 7, total: 135, percentage: 94.8 },
-    { grade: 'Grade 6', present: 125, absent: 13, total: 138, percentage: 90.6 }
-  ];
+  useEffect(() => {
+    const loadReportData = async () => {
+      if (!user?.schoolId) return;
+      
+      try {
+        setLoading(true);
+        
+        if (selectedReport === 'attendance') {
+          // Load attendance data by grade
+          const { data: attendanceData, error: attendanceError } = await supabase
+            .from('attendance_summary')
+            .select(`
+              attendance_percentage,
+              students(class_id, classes(grade))
+            `)
+            .eq('school_id', user.schoolId);
 
-  const academicPerformance = [
-    { subject: 'Mathematics', average: 78.5, trend: 'up', improvement: '+5.2%' },
-    { subject: 'English', average: 82.1, trend: 'up', improvement: '+3.8%' },
-    { subject: 'Science', average: 75.3, trend: 'down', improvement: '-2.1%' },
-    { subject: 'Social Studies', average: 80.7, trend: 'up', improvement: '+4.5%' },
-    { subject: 'Kiswahili', average: 77.9, trend: 'stable', improvement: '+0.3%' }
-  ];
+          if (attendanceError) throw attendanceError;
+
+          // Group by grade
+          const groupedData = attendanceData?.reduce((acc: any, record: any) => {
+            const grade = record.students?.classes?.grade || 'Unknown';
+            if (!acc[grade]) {
+              acc[grade] = { present: 0, absent: 0, total: 0, percentage: 0 };
+            }
+            acc[grade].percentage = record.attendance_percentage;
+            acc[grade].total += 1;
+            acc[grade].present += Math.round(record.attendance_percentage / 100);
+            acc[grade].absent += Math.round((100 - record.attendance_percentage) / 100);
+            return acc;
+          }, {});
+
+          const formattedData = Object.entries(groupedData || {}).map(([grade, data]: [string, any]) => ({
+            grade,
+            present: data.present,
+            absent: data.absent,
+            total: data.total,
+            percentage: data.percentage
+          }));
+
+          setAttendanceData(formattedData);
+        } else if (selectedReport === 'academic') {
+          // Load academic performance data
+          const { data: gradesData, error: gradesError } = await supabase
+            .from('grades')
+            .select(`
+              score,
+              max_score,
+              subjects(name)
+            `)
+            .eq('school_id', user.schoolId);
+
+          if (gradesError) throw gradesError;
+
+          // Group by subject
+          const groupedGrades = gradesData?.reduce((acc: any, grade: any) => {
+            const subject = grade.subjects?.name || 'Unknown';
+            if (!acc[subject]) {
+              acc[subject] = { scores: [], total: 0, count: 0 };
+            }
+            const percentage = (grade.score / grade.max_score) * 100;
+            acc[subject].scores.push(percentage);
+            acc[subject].total += percentage;
+            acc[subject].count += 1;
+            return acc;
+          }, {});
+
+          const formattedAcademic = Object.entries(groupedGrades || {}).map(([subject, data]: [string, any]) => ({
+            subject,
+            average: Math.round(data.total / data.count),
+            trend: 'stable', // TODO: Calculate actual trend
+            improvement: '+0.0%' // TODO: Calculate actual improvement
+          }));
+
+          setAcademicData(formattedAcademic);
+        }
+      } catch (error) {
+        console.error('Error loading report data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadReportData();
+  }, [selectedReport, user?.schoolId]);
+
+  const academicPerformance = academicData;
 
   const insights = [
     {

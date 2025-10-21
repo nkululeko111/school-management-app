@@ -1,5 +1,6 @@
-import React from 'react';
-import { useSchool } from '../../contexts/SchoolContext';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../../hooks/useAuth';
+import { supabase } from '../../supabaseClient';
 import { 
   Users, 
   GraduationCap, 
@@ -10,48 +11,117 @@ import {
   Calendar,
   BookOpen,
   BarChart3,
-  Settings
+  Settings,
+  Loader2
 } from 'lucide-react';
 
-const AdminDashboard: React.FC = () => {
-  const { students, classes } = useSchool();
+interface DashboardStats {
+  totalStudents: number;
+  totalTeachers: number;
+  totalParents: number;
+  totalClasses: number;
+  averageAttendance: number;
+  recentActivities: Array<{
+    id: string;
+    action: string;
+    student: string;
+    time: string;
+    type: string;
+  }>;
+}
 
-  const stats = [
+const AdminDashboard: React.FC = () => {
+  const { user } = useAuth();
+  const [stats, setStats] = useState<DashboardStats>({
+    totalStudents: 0,
+    totalTeachers: 0,
+    totalParents: 0,
+    totalClasses: 0,
+    averageAttendance: 0,
+    recentActivities: []
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadDashboardData = async () => {
+      if (!user?.schoolId) return;
+      
+      try {
+        setLoading(true);
+        
+        // Load all stats in parallel
+        const [
+          studentsResult,
+          teachersResult,
+          parentsResult,
+          classesResult,
+          attendanceResult
+        ] = await Promise.all([
+          supabase.from('students').select('id').eq('school_id', user.schoolId),
+          supabase.from('teachers').select('id').eq('school_id', user.schoolId),
+          supabase.from('parents').select('id'),
+          supabase.from('classes').select('id').eq('school_id', user.schoolId),
+          supabase.from('attendance_summary').select('attendance_percentage').eq('student_id', user.schoolId)
+        ]);
+
+        // Calculate average attendance
+        const attendanceData = attendanceResult.data || [];
+        const avgAttendance = attendanceData.length > 0 
+          ? attendanceData.reduce((sum, record) => sum + (record.attendance_percentage || 0), 0) / attendanceData.length
+          : 0;
+
+        setStats({
+          totalStudents: studentsResult.data?.length || 0,
+          totalTeachers: teachersResult.data?.length || 0,
+          totalParents: parentsResult.data?.length || 0,
+          totalClasses: classesResult.data?.length || 0,
+          averageAttendance: Math.round(avgAttendance),
+          recentActivities: [
+            { id: '1', action: 'New student admission', student: 'Recent Student', time: '2 hours ago', type: 'admission' },
+            { id: '2', action: 'Parent meeting scheduled', student: 'Class 5A', time: '4 hours ago', type: 'meeting' },
+            { id: '3', action: 'Attendance alert sent', student: '15 students', time: '6 hours ago', type: 'alert' },
+            { id: '4', action: 'Report card generated', student: 'Grade 6', time: '1 day ago', type: 'report' }
+          ]
+        });
+      } catch (error) {
+        console.error('Error loading dashboard data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadDashboardData();
+  }, [user?.schoolId]);
+
+  const statsCards = [
     {
       title: 'Total Students',
-      value: students.length.toString(),
+      value: stats.totalStudents.toString(),
       icon: Users,
       color: 'bg-blue-500',
       change: '+12%'
     },
     {
-      title: 'Total Classes',
-      value: classes.length.toString(),
+      title: 'Total Teachers',
+      value: stats.totalTeachers.toString(),
       icon: GraduationCap,
       color: 'bg-green-500',
       change: '+5%'
     },
     {
-      title: 'Average Attendance',
-      value: '92%',
+      title: 'Total Parents',
+      value: stats.totalParents.toString(),
       icon: UserCheck,
       color: 'bg-orange-500',
       change: '+3%'
     },
     {
-      title: 'Performance Score',
-      value: '87%',
+      title: 'Average Attendance',
+      value: `${stats.averageAttendance}%`,
       icon: TrendingUp,
       color: 'bg-purple-500',
       change: '+8%'
     }
-  ];
-
-  const recentActivities = [
-    { id: 1, action: 'New student admission', student: 'Grace Wanjiku', time: '2 hours ago', type: 'admission' },
-    { id: 2, action: 'Parent meeting scheduled', student: 'Class 5A', time: '4 hours ago', type: 'meeting' },
-    { id: 3, action: 'Attendance alert sent', student: '15 students', time: '6 hours ago', type: 'alert' },
-    { id: 4, action: 'Report card generated', student: 'Grade 6', time: '1 day ago', type: 'report' }
   ];
 
   const upcomingEvents = [
@@ -59,6 +129,17 @@ const AdminDashboard: React.FC = () => {
     { id: 2, title: 'Mid-term Examinations', date: 'Jan 25, 2025', time: 'All Day' },
     { id: 3, title: 'School Board Meeting', date: 'Jan 30, 2025', time: '2:00 PM' }
   ];
+
+  if (loading) {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-orange-600" />
+          <p className="text-gray-600">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6 slide-in">
@@ -72,7 +153,7 @@ const AdminDashboard: React.FC = () => {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat) => {
+        {statsCards.map((stat) => {
           const Icon = stat.icon;
           return (
             <div key={stat.title} className="bg-white rounded-xl shadow-lg p-6 card-shadow">
@@ -100,7 +181,7 @@ const AdminDashboard: React.FC = () => {
           </h2>
           
           <div className="space-y-4">
-            {recentActivities.map((activity) => (
+            {stats.recentActivities.map((activity) => (
               <div key={activity.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                   activity.type === 'admission' ? 'bg-green-100' :

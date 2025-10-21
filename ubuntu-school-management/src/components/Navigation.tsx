@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   School,
@@ -27,6 +27,7 @@ const Navigation: React.FC = () => {
     { icon: Users, label: 'Students', path: '/students', roles: ['admin', 'teacher'] },
     { icon: UserCheck, label: 'Attendance', path: '/attendance', roles: ['admin', 'teacher'] },
     { icon: School, label: 'Classes', path: '/classes', roles: ['admin', 'teacher'] },
+    { icon: BarChart3, label: 'Report Cards', path: '/report-cards', roles: ['admin', 'teacher', 'parent', 'student'] },
     { icon: Calendar, label: 'Timetable', path: '/timetable', roles: ['admin', 'teacher', 'student'] },
     { icon: MessageSquare, label: 'Communication', path: '/communication', roles: ['admin', 'teacher', 'parent'] },
     { icon: BarChart3, label: 'Reports', path: '/reports', roles: ['admin', 'teacher', 'parent'] }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import { School, Eye, EyeOff, CheckCircle } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 

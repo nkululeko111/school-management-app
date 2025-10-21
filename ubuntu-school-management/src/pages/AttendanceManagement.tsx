@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { useSchool } from '../contexts/SchoolContext';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../hooks/useAuth';
+import { supabase } from '../supabaseClient';
 import Navigation from '../components/Navigation';
 import { 
   UserCheck, 
@@ -9,14 +10,110 @@ import {
   CheckCircle, 
   XCircle,
   AlertTriangle,
-  MessageSquare
+  MessageSquare,
+  Loader2,
+  Save
 } from 'lucide-react';
 
+interface Student {
+  id: string;
+  name: string;
+  admissionNumber: string;
+  class: string;
+  parentContact: string;
+  avatar?: string;
+}
+
 const AttendanceManagement: React.FC = () => {
-  const { students, classes, markAttendance } = useSchool();
-  const [selectedClass, setSelectedClass] = useState(classes[0]?.id || '');
+  const { user } = useAuth();
+  const [selectedClass, setSelectedClass] = useState('');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [attendanceData, setAttendanceData] = useState<Record<string, boolean>>({});
+  const [students, setStudents] = useState<Student[]>([]);
+  const [classes, setClasses] = useState<{ id: string; name: string; grade: string; studentCount: number }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    const loadData = async () => {
+      if (!user?.schoolId) return;
+      
+      try {
+        setLoading(true);
+        
+        // Load classes with student counts
+        const { data: classesData, error: classesError } = await supabase
+          .from('classes')
+          .select(`
+            id,
+            name,
+            grade,
+            students(count)
+          `)
+          .eq('school_id', user.schoolId);
+
+        if (classesError) throw classesError;
+
+        const formattedClasses = classesData?.map(cls => ({
+          id: cls.id,
+          name: cls.name,
+          grade: cls.grade,
+          studentCount: cls.students?.[0]?.count || 0
+        })) || [];
+
+        setClasses(formattedClasses);
+        
+        if (formattedClasses.length > 0 && !selectedClass) {
+          setSelectedClass(formattedClasses[0].id);
+        }
+      } catch (error) {
+        console.error('Error loading classes:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, [user?.schoolId, selectedClass]);
+
+  useEffect(() => {
+    const loadStudents = async () => {
+      if (!selectedClass || !user?.schoolId) return;
+      
+      try {
+        const { data: studentsData, error: studentsError } = await supabase
+          .from('students')
+          .select(`
+            id,
+            first_name,
+            last_name,
+            admission_number,
+            phone,
+            class_id,
+            classes(name)
+          `)
+          .eq('school_id', user.schoolId)
+          .eq('class_id', selectedClass);
+
+        if (studentsError) throw studentsError;
+
+        const formattedStudents = studentsData?.map(student => ({
+          id: student.id,
+          name: `${student.first_name} ${student.last_name}`,
+          admissionNumber: student.admission_number,
+          class: student.classes?.[0]?.name || 'N/A',
+          parentContact: student.phone || 'N/A'
+        })) || [];
+
+        setStudents(formattedStudents);
+      } catch (error) {
+        console.error('Error loading students:', error);
+      }
+    };
+
+    loadStudents();
+  }, [selectedClass, user?.schoolId]);
 
   const classStudents = students.filter(student => 
     classes.find(c => c.id === selectedClass)?.name === student.class
@@ -29,22 +126,46 @@ const AttendanceManagement: React.FC = () => {
     }));
   };
 
-  const handleSubmitAttendance = () => {
-    Object.entries(attendanceData).forEach(([studentId, present]) => {
-      markAttendance(studentId, present);
-    });
+  const handleSubmitAttendance = async () => {
+    if (!selectedClass || !selectedDate) return;
     
-    // Send notifications for absent students
-    const absentStudents = classStudents.filter(student => 
-      attendanceData[student.id] === false
-    );
-    
-    if (absentStudents.length > 0) {
-      // Simulate sending notifications
-      alert(`Attendance notifications sent to ${absentStudents.length} parent(s) via SMS and WhatsApp`);
+    try {
+      setSaving(true);
+      
+      // Save attendance records
+      const attendanceRecords = Object.entries(attendanceData).map(([studentId, present]) => ({
+        student_id: studentId,
+        date: selectedDate,
+        status: present ? 'present' : 'absent',
+        school_id: user?.schoolId
+      }));
+
+      const { error } = await supabase
+        .from('attendance')
+        .upsert(attendanceRecords);
+
+      if (error) throw error;
+
+      setMessage('Attendance saved successfully!');
+      
+      // Send notifications for absent students
+      const absentStudents = classStudents.filter(student => 
+        attendanceData[student.id] === false
+      );
+      
+      if (absentStudents.length > 0) {
+        // TODO: Implement actual notification sending
+        console.log(`Would send notifications to ${absentStudents.length} parent(s)`);
+      }
+      
+      // Reset form
+      setAttendanceData({});
+    } catch (error) {
+      console.error('Error saving attendance:', error);
+      setMessage('Error saving attendance. Please try again.');
+    } finally {
+      setSaving(false);
     }
-    
-    alert('Attendance marked successfully!');
   };
 
   const presentCount = Object.values(attendanceData).filter(Boolean).length;
@@ -104,11 +225,11 @@ const AttendanceManagement: React.FC = () => {
               <div className="flex items-end">
                 <button
                   onClick={handleSubmitAttendance}
-                  disabled={unmarkedCount === classStudents.length}
+                  disabled={saving || unmarkedCount === classStudents.length}
                   className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
                 >
-                  <Send size={16} />
-                  Submit Attendance
+                  {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                  {saving ? 'Saving...' : 'Submit Attendance'}
                 </button>
               </div>
             </div>

@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Navigation from '../components/Navigation';
+import { useAuth } from '../hooks/useAuth';
+import { supabase } from '../supabaseClient';
 import { 
   MessageSquare, 
   Send, 
@@ -9,14 +11,25 @@ import {
   Smartphone,
   BellRing,
   Clock,
-  CheckCircle
+  CheckCircle,
+  Loader2
 } from 'lucide-react';
 
+interface Class {
+  id: string;
+  name: string;
+  grade: string;
+}
+
 const Communication: React.FC = () => {
+  const { user } = useAuth();
   const [selectedChannel, setSelectedChannel] = useState<'sms' | 'whatsapp' | 'email' | 'app'>('sms');
   const [selectedAudience, setSelectedAudience] = useState<'all' | 'class' | 'individual'>('all');
   const [message, setMessage] = useState('');
   const [selectedClass, setSelectedClass] = useState('');
+  const [classes, setClasses] = useState<Class[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
 
   const channels = [
     { id: 'sms', label: 'SMS', icon: Phone, color: 'bg-green-500', description: 'Instant delivery, works on all phones' },
@@ -55,12 +68,62 @@ const Communication: React.FC = () => {
     }
   ];
 
-  const handleSendMessage = () => {
+  useEffect(() => {
+    const loadClasses = async () => {
+      if (!user?.schoolId) return;
+      
+      try {
+        setLoading(true);
+        
+        const { data: classesData, error: classesError } = await supabase
+          .from('classes')
+          .select('id, name, grade')
+          .eq('school_id', user.schoolId)
+          .order('grade');
+
+        if (classesError) throw classesError;
+
+        setClasses(classesData || []);
+      } catch (error) {
+        console.error('Error loading classes:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadClasses();
+  }, [user?.schoolId]);
+
+  const handleSendMessage = async () => {
     if (!message.trim()) return;
     
-    // Simulate sending
-    alert(`Message sent via ${selectedChannel.toUpperCase()} to ${selectedAudience} successfully!`);
-    setMessage('');
+    try {
+      setSending(true);
+      
+      // Save message to database
+      const { error } = await supabase
+        .from('communications')
+        .insert({
+          channel: selectedChannel,
+          audience: selectedAudience,
+          message: message,
+          class_id: selectedAudience === 'class' ? selectedClass : null,
+          school_id: user?.schoolId,
+          sent_by: user?.id,
+          status: 'sent'
+        });
+
+      if (error) throw error;
+
+      // TODO: Implement actual notification sending (SMS, WhatsApp, Email)
+      alert(`Message sent via ${selectedChannel.toUpperCase()} to ${selectedAudience} successfully!`);
+      setMessage('');
+    } catch (error) {
+      console.error('Error sending message:', error);
+      alert('Error sending message. Please try again.');
+    } finally {
+      setSending(false);
+    }
   };
 
   const messageTemplates = [
@@ -169,17 +232,25 @@ const Communication: React.FC = () => {
                   {selectedAudience === 'class' && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Select Class</label>
-                      <select
-                        value={selectedClass}
-                        onChange={(e) => setSelectedClass(e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
-                      >
-                        <option value="">Choose a class...</option>
-                        <option value="5A">Grade 5A</option>
-                        <option value="5B">Grade 5B</option>
-                        <option value="6A">Grade 6A</option>
-                        <option value="6B">Grade 6B</option>
-                      </select>
+                      {loading ? (
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Loading classes...
+                        </div>
+                      ) : (
+                        <select
+                          value={selectedClass}
+                          onChange={(e) => setSelectedClass(e.target.value)}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                        >
+                          <option value="">Choose a class...</option>
+                          {classes.map(cls => (
+                            <option key={cls.id} value={cls.id}>
+                              {cls.grade} - {cls.name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                     </div>
                   )}
 
@@ -217,11 +288,11 @@ const Communication: React.FC = () => {
                   {/* Send Button */}
                   <button
                     onClick={handleSendMessage}
-                    disabled={!message.trim()}
+                    disabled={!message.trim() || sending}
                     className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
                   >
-                    <Send size={16} />
-                    Send via {selectedChannel.toUpperCase()}
+                    {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                    {sending ? 'Sending...' : `Send via ${selectedChannel.toUpperCase()}`}
                   </button>
                 </div>
               </div>

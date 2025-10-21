@@ -1,5 +1,5 @@
 import React from 'react';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import AdminDashboard from './dashboards/AdminDashboard';
 import TeacherDashboard from './dashboards/TeacherDashboard';
 import ParentDashboard from './dashboards/ParentDashboard';
